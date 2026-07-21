@@ -1,0 +1,6 @@
+@BakendApi_HostAddress = http://localhost:5147
+
+GET {{BakendApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -123,6 +123,24 @@ public static class DatosHeladeria
     public static readonly List<Venta> Ventas = [];
 
     public static readonly List<DetalleVenta> DetalleVenta = [];
+
+    public static readonly List<Compra> Compras =
+    [
+        new(1, 1, 7.00m, "Efectivo", "Compra de helados variados", new DateTime(2025, 7, 20, 14, 30, 0)),
+        new(2, 2, 5.50m, "Tarjeta", "Paletas y batido", new DateTime(2025, 7, 20, 16, 0, 0)),
+        new(3, 3, 12.00m, "Efectivo", "Pedido grande para evento", new DateTime(2025, 7, 21, 10, 15, 0))
+    ];
+
+    public static readonly List<DetalleCompra> DetalleCompra =
+    [
+        new(1, 1, 1, 2, 2.50m, 5.00m),
+        new(2, 1, 3, 1, 2.50m, 2.50m),
+        new(3, 2, 6, 2, 1.50m, 3.00m),
+        new(4, 2, 11, 1, 3.50m, 3.50m),
+        new(5, 3, 9, 1, 4.50m, 4.50m),
+        new(6, 3, 10, 1, 5.00m, 5.00m),
+        new(7, 3, 12, 1, 4.00m, 4.00m)
+    ];
 }
 
 public record Categoria(int Id, string Nombre, string Descripcion);

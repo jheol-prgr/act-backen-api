@@ -1,28 +1,29 @@
-using System.Text.Json.Serialization;
+using BakendApi.Data;
+using BakendApi.Models;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BakendApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class ProductosController : ControllerBase
+public class ProductosController(HeladeriaRepository repository) : ControllerBase
 {
     [HttpGet]
-    public ActionResult<IEnumerable<Producto>> ObtenerProductos()
+    public async Task<ActionResult<IEnumerable<Producto>>> ObtenerProductos(CancellationToken cancellationToken)
     {
-        return Ok(DatosHeladeria.Productos);
+        return Ok(await repository.ObtenerProductosAsync(cancellationToken));
     }
 
     [HttpGet("activos")]
-    public ActionResult<IEnumerable<Producto>> ObtenerProductosActivos()
+    public async Task<ActionResult<IEnumerable<Producto>>> ObtenerProductosActivos(CancellationToken cancellationToken)
     {
-        return Ok(DatosHeladeria.Productos.Where(producto => producto.Activo));
+        return Ok(await repository.ObtenerProductosActivosAsync(cancellationToken));
     }
 
     [HttpGet("{id:int}")]
-    public ActionResult<Producto> ObtenerProductoPorId(int id)
+    public async Task<ActionResult<Producto>> ObtenerProductoPorId(int id, CancellationToken cancellationToken)
     {
-        var producto = DatosHeladeria.Productos.FirstOrDefault(producto => producto.Id == id);
+        var producto = await repository.ObtenerProductoPorIdAsync(id, cancellationToken);
 
         if (producto is null)
         {
@@ -33,60 +34,60 @@ public class ProductosController : ControllerBase
     }
 
     [HttpPost]
-    public ActionResult<Producto> CrearProducto(CrearProductoRequest request)
+    public async Task<ActionResult<Producto>> CrearProducto(CrearProductoRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Nombre) || request.Precio <= 0 || request.Stock < 0)
+        if (!EsProductoValido(request.Nombre, request.Precio, request.Stock, request.IdCategoria))
         {
             return BadRequest(new { mensaje = "Complete los campos obligatorios del producto" });
         }
 
-        var producto = new Producto(
-            DatosHeladeria.Productos.Max(producto => producto.Id) + 1,
-            request.Nombre,
-            request.Descripcion,
-            request.Precio,
-            request.Stock,
-            request.IdCategoria,
-            true);
+        if (await repository.ObtenerCategoriaPorIdAsync(request.IdCategoria, cancellationToken) is null)
+        {
+            return BadRequest(new { mensaje = "Categoria no encontrada" });
+        }
 
-        DatosHeladeria.Productos.Add(producto);
+        var producto = await repository.CrearProductoAsync(request, cancellationToken);
 
         return CreatedAtAction(nameof(ObtenerProductoPorId), new { id = producto.Id }, producto);
     }
 
     [HttpPut("{id:int}")]
-    public IActionResult ActualizarProducto(int id, Producto productoActualizado)
+    public async Task<IActionResult> ActualizarProducto(int id, ActualizarProductoRequest productoActualizado, CancellationToken cancellationToken)
     {
-        var index = DatosHeladeria.Productos.FindIndex(producto => producto.Id == id);
-
-        if (index == -1)
-        {
-            return NotFound(new { mensaje = "Producto no encontrado" });
-        }
-
-        if (string.IsNullOrWhiteSpace(productoActualizado.Nombre) || productoActualizado.Precio <= 0 || productoActualizado.Stock < 0)
+        if (!EsProductoValido(productoActualizado.Nombre, productoActualizado.Precio, productoActualizado.Stock, productoActualizado.IdCategoria))
         {
             return BadRequest(new { mensaje = "Complete los campos obligatorios del producto" });
         }
 
-        DatosHeladeria.Productos[index] = productoActualizado with { Id = id };
+        if (await repository.ObtenerCategoriaPorIdAsync(productoActualizado.IdCategoria, cancellationToken) is null)
+        {
+            return BadRequest(new { mensaje = "Categoria no encontrada" });
+        }
+
+        var actualizado = await repository.ActualizarProductoAsync(id, productoActualizado, cancellationToken);
+        if (!actualizado)
+        {
+            return NotFound(new { mensaje = "Producto no encontrado" });
+        }
 
         return NoContent();
     }
 
     [HttpDelete("{id:int}")]
-    public IActionResult EliminarProducto(int id)
+    public async Task<IActionResult> EliminarProducto(int id, CancellationToken cancellationToken)
     {
-        var index = DatosHeladeria.Productos.FindIndex(producto => producto.Id == id);
-
-        if (index == -1)
+        var eliminado = await repository.DesactivarProductoAsync(id, cancellationToken);
+        if (!eliminado)
         {
             return NotFound(new { mensaje = "Producto no encontrado" });
         }
 
-        DatosHeladeria.Productos[index] = DatosHeladeria.Productos[index] with { Activo = false };
-
         return NoContent();
+    }
+
+    private static bool EsProductoValido(string nombre, decimal precio, int stock, int idCategoria)
+    {
+        return !string.IsNullOrWhiteSpace(nombre) && precio > 0 && stock >= 0 && idCategoria > 0;
     }
 }
 
@@ -120,10 +121,6 @@ public static class DatosHeladeria
         new(15, "Salsa de Chocolate", "Salsa de chocolate para topping", 0.75m, 150, 5, true)
     ];
 
-    public static readonly List<Venta> Ventas = [];
-
-    public static readonly List<DetalleVenta> DetalleVenta = [];
-
     public static readonly List<Compra> Compras =
     [
         new(1, 1, 7.00m, "Efectivo", "Compra de helados variados", new DateTime(2025, 7, 20, 14, 30, 0)),
@@ -142,37 +139,3 @@ public static class DatosHeladeria
         new(7, 3, 12, 1, 4.00m, 4.00m)
     ];
 }
-
-public record Categoria(int Id, string Nombre, string Descripcion);
-
-public record Producto(
-    int Id,
-    string Nombre,
-    string Descripcion,
-    decimal Precio,
-    int Stock,
-    [property: JsonPropertyName("id_categoria")] int IdCategoria,
-    bool Activo);
-
-public record Venta(
-    int Id,
-    [property: JsonPropertyName("id_usuario")] int IdUsuario,
-    decimal Total,
-    [property: JsonPropertyName("metodo_pago")] string MetodoPago,
-    string Observaciones,
-    [property: JsonPropertyName("fecha_venta")] DateTime FechaVenta);
-
-public record DetalleVenta(
-    int Id,
-    [property: JsonPropertyName("id_venta")] int IdVenta,
-    [property: JsonPropertyName("id_producto")] int IdProducto,
-    int Cantidad,
-    [property: JsonPropertyName("precio_unitario")] decimal PrecioUnitario,
-    decimal Subtotal);
-
-public record CrearProductoRequest(
-    string Nombre,
-    string Descripcion,
-    decimal Precio,
-    int Stock,
-    [property: JsonPropertyName("id_categoria")] int IdCategoria);
